@@ -5,7 +5,7 @@
 
 DEFINE_LOG_CATEGORY(LogAssetGenerator)
 
-FString UAssetTypeGenerator::GetAdditionalDumpFilePath(const FString& Postfix, const FString& Extension) {
+FString UAssetTypeGenerator::GetAdditionalDumpFilePath(const FString& Postfix, const FString& Extension) const {
 	FString Filename = FPackageName::GetShortName(GetPackageName());
 		
 	if (Postfix.Len() > 0) {
@@ -30,6 +30,7 @@ UAssetTypeGenerator::UAssetTypeGenerator() {
 	this->bUsingExistingPackage = false;
 	this->bAssetChanged = false;
 	this->bHasAssetEverBeenChanged = false;
+	this->bIsGeneratingPublicProject = false;
 }
 
 void UAssetTypeGenerator::InitializeInternal(const FString& InPackageBaseDirectory, const FName InPackageName, const TSharedPtr<FJsonObject> RootFileObject) {

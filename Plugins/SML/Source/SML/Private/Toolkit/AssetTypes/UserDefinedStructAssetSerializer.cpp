@@ -14,8 +14,15 @@ void UUserDefinedStructAssetSerializer::SerializeAsset(TSharedRef<FSerialization
     Data->SetStringField(TEXT("Guid"), Asset->Guid.ToString());
 
     //Serialize struct default instance
-    const TSharedRef<FJsonObject> DefaultInstance = Serializer->SerializeStruct(Asset, Asset->GetDefaultInstance());
+	TArray<int32> ReferencedSubobjects;
+    const TSharedRef<FJsonObject> DefaultInstance = Serializer->SerializeStruct(Asset, Asset->GetDefaultInstance(), &ReferencedSubobjects);
     Data->SetObjectField(TEXT("StructDefaultInstance"), DefaultInstance);
+
+	TArray<TSharedPtr<FJsonValue>> ReferencedSubobjectsArray;
+	for (const int32 ObjectIndex : ReferencedSubobjects) {
+		ReferencedSubobjectsArray.Add(MakeShareable(new FJsonValueNumber(ObjectIndex)));
+	}
+	Data->SetArrayField(TEXT("ReferencedObjects"), ReferencedSubobjectsArray);
     
     END_ASSET_SERIALIZATION
 }

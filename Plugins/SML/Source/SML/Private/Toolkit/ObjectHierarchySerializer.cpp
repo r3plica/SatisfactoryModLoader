@@ -9,8 +9,7 @@ DECLARE_LOG_CATEGORY_CLASS(LogObjectHierarchySerializer, Warning, Log);
 TSet<FName> UObjectHierarchySerializer::UnhandledNativeClasses;
 
 UObjectHierarchySerializer::UObjectHierarchySerializer() {
-    bAllowExportObjectSerialization = true;
-    LastObjectIndex = 0;
+    this->LastObjectIndex = 0;
     AllowedNativeSerializeClasses.Add(UObject::StaticClass());
     APPEND_DEFAULT_SERIALIZABLE_NATIVE_CLASSES(AllowedNativeSerializeClasses.Add);
 }
@@ -46,10 +45,6 @@ void UObjectHierarchySerializer::SetObjectMark(UObject* Object, const FString& O
     this->ObjectMarks.Add(Object, ObjectMark);
 }
 
-void UObjectHierarchySerializer::SetAllowExportedObjectSerialization(bool bAllowExportedObjectSerialization) {
-    this->bAllowExportObjectSerialization = bAllowExportedObjectSerialization;
-}
-
 int32 UObjectHierarchySerializer::SerializeObject(UObject* Object) {
     if (Object == nullptr) {
         return INDEX_NONE;
@@ -73,7 +68,6 @@ int32 UObjectHierarchySerializer::SerializeObject(UObject* Object) {
         SerializeImportedObject(ResultJson, Object);
         
     } else {
-        checkf(bAllowExportObjectSerialization, TEXT("Exported object serialization is not currently allowed"));
         ResultJson->SetStringField(TEXT("Type"), TEXT("Export"));
 
         if (ObjectMarks.Contains(Object)) {
@@ -93,14 +87,17 @@ UObject* UObjectHierarchySerializer::DeserializeObject(int32 Index) {
     if (Index == INDEX_NONE) {
         return nullptr;
     }
+	
     UObject** LoadedObject = LoadedObjects.Find(Index);
     if (LoadedObject != nullptr) {
         return *LoadedObject;
     }
+	
     if (!SerializedObjects.Contains(Index)) {
         UE_LOG(LogObjectHierarchySerializer, Error, TEXT("DeserializeObject for package %s called with invalid Index: %d"), *SourcePackage->GetName(), Index);
         return nullptr;
     }
+	
     const TSharedPtr<FJsonObject>& ObjectJson = SerializedObjects.FindChecked(Index);
     const FString ObjectType = ObjectJson->GetStringField(TEXT("Type"));
     
@@ -145,25 +142,130 @@ TSharedRef<FJsonObject> UObjectHierarchySerializer::SerializeObjectProperties(UO
 
 void UObjectHierarchySerializer::SerializeObjectPropertiesIntoObject(UObject* Object, TSharedPtr<FJsonObject> Properties) {
     UClass* ObjectClass = Object->GetClass();
+	TArray<int32> ReferencedSubobjects;
+
+	//Serialize actual object property values
     for (FProperty* Property = ObjectClass->PropertyLink; Property; Property = Property->PropertyLinkNext) {
         if (PropertySerializer->ShouldSerializeProperty(Property)) {
             const void* PropertyValue = Property->ContainerPtrToValuePtr<void>(Object);
-            TSharedRef<FJsonValue> PropertyValueJson = PropertySerializer->SerializePropertyValue(Property, PropertyValue);
+            TSharedRef<FJsonValue> PropertyValueJson = PropertySerializer->SerializePropertyValue(Property, PropertyValue, &ReferencedSubobjects);
+        	
             Properties->SetField(Property->GetName(), PropertyValueJson);
         }
     }
+
+	//Also write $ReferencedSubobjects field used for deserialization dependency gathering
+	TArray<TSharedPtr<FJsonValue>> ReferencedSubobjectsArray;
+	for (const int32 ObjectIndex : ReferencedSubobjects) {
+		ReferencedSubobjectsArray.Add(MakeShareable(new FJsonValueNumber(ObjectIndex)));
+	}
+	
+	Properties->SetArrayField(TEXT("$ReferencedObjects"), ReferencedSubobjectsArray);
+}
+
+bool UObjectHierarchySerializer::CompareUObjects(const int32 ObjectIndex, UObject* Object) {
+	//If either of the operands are null, they are only equal if both are NULL
+	if (ObjectIndex == INDEX_NONE || Object == NULL) {
+		return ObjectIndex == INDEX_NONE && Object == NULL;
+	}
+
+	const TSharedPtr<FJsonObject>& ObjectJson = SerializedObjects.FindChecked(ObjectIndex);
+	const FString ObjectType = ObjectJson->GetStringField(TEXT("Type"));
+
+	//Object is imported from another package, and not located in our own
+	if (ObjectType == TEXT("Import")) {
+		//Return early if object name doesn't match
+		const FString ObjectName = ObjectJson->GetStringField(TEXT("ObjectName"));
+		if (Object->GetName() != ObjectName) {
+			return false;
+		}
+
+		//If we have outer, compare them too to make sure they match
+		if (ObjectJson->HasField(TEXT("Outer"))) {
+			const int32 OuterObjectIndex = ObjectJson->GetIntegerField(TEXT("Outer"));
+			return CompareUObjects(OuterObjectIndex, Object->GetOuter());
+		}
+		//We end up here if we have no outer but have matching name, in which case we represent top-level object
+		return true;
+	}
+
+	//Otherwise we are dealing with the exported object
+	//Check if object is serialized through mark first
+	if (ObjectJson->HasField(TEXT("ObjectMark"))) {
+		const FString ObjectMark = ObjectJson->GetStringField(TEXT("ObjectMark"));
+		UObject* const* FoundObject = ObjectMarks.FindKey(ObjectMark);
+		checkf(FoundObject, TEXT("Cannot resolve object serialized using mark: %s"), *ObjectMark);
+
+		//Marked objects only match if they point to the same UObject
+		UObject* RegisteredObject = *FoundObject;
+		return RegisteredObject == Object;
+	}
+
+	//Make sure object name matches first
+	const FString ObjectName = ObjectJson->GetStringField(TEXT("ObjectName"));
+	if (Object->GetName() != ObjectName) {
+		return false;
+	}
+
+	//Make sure object class matches provided one
+	const int32 ObjectClassIndex = ObjectJson->GetIntegerField(TEXT("ObjectClass"));
+	if (!CompareUObjects(ObjectClassIndex, Object->GetClass())) {
+		return false;
+	}
+        
+    //If object is missing outer, we are dealing with the package itself. Then SourcePackage must match Object,
+	//and we do not have any properties recorded for UPackage, so we return early
+    if (!ObjectJson->HasField(TEXT("Outer"))) {
+        return SourcePackage == Object;
+    }
+
+	//Otherwise make sure outer object matches
+    const int32 OuterObjectIndex = ObjectJson->GetIntegerField(TEXT("Outer"));
+	if (!CompareUObjects(OuterObjectIndex, Object->GetOuter())) {
+		return false;
+	}
+
+    //Deserialize object properties now
+    if (ObjectJson->HasField(TEXT("Properties"))) {
+        const TSharedPtr<FJsonObject>& Properties = ObjectJson->GetObjectField(TEXT("Properties"));
+        return AreObjectPropertiesUpToDate(Properties.ToSharedRef(), Object);
+    }
+
+	//No properties detected, we are matching just fine in that case
+	return true;
+}
+
+bool UObjectHierarchySerializer::AreObjectPropertiesUpToDate(const TSharedRef<FJsonObject>& Properties, UObject* Object) {
+	UClass* ObjectClass = Object->GetClass();
+
+	//Iterate all properties and return false if our values do not match existing ones
+	//This will also try to deserialize objects in "read only" mode, incrementing ObjectsNotUpToDate when existing object fields mismatch
+	for (FProperty* Property = ObjectClass->PropertyLink; Property; Property = Property->PropertyLinkNext) {
+		const FString PropertyName = Property->GetName();
+		
+		if (PropertySerializer->ShouldSerializeProperty(Property) && Properties->HasField(PropertyName)) {
+			const void* PropertyValue = Property->ContainerPtrToValuePtr<void>(Object);
+			const TSharedPtr<FJsonValue> ValueObject = Properties->Values.FindChecked(PropertyName);
+
+			if (!PropertySerializer->ComparePropertyValues(Property, ValueObject.ToSharedRef(), PropertyValue)) {
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 void UObjectHierarchySerializer::DeserializeObjectProperties(const TSharedRef<FJsonObject>& Properties, UObject* Object) {
     UClass* ObjectClass = Object->GetClass();
     for (FProperty* Property = ObjectClass->PropertyLink; Property; Property = Property->PropertyLinkNext) {
         const FString PropertyName = Property->GetName();
+    	
         if (PropertySerializer->ShouldSerializeProperty(Property) && Properties->HasField(PropertyName)) {
             void* PropertyValue = Property->ContainerPtrToValuePtr<void>(Object);
             const TSharedPtr<FJsonValue>& ValueObject = Properties->Values.FindChecked(PropertyName);
-            if (ValueObject.IsValid()) {
-                PropertySerializer->DeserializePropertyValue(Property, ValueObject.ToSharedRef(), PropertyValue);
-            }
+        	
+        	PropertySerializer->DeserializePropertyValue(Property, ValueObject.ToSharedRef(), PropertyValue);
         }
     }
 }
@@ -179,31 +281,26 @@ TArray<TSharedPtr<FJsonValue>> UObjectHierarchySerializer::FinalizeSerialization
     return ObjectsArray;
 }
 
-void UObjectHierarchySerializer::CollectReferencedPackages(TArray<FString>& OutReferencedPackageNames) {
-    for (const TPair<int32, TSharedPtr<FJsonObject>>& Pair : SerializedObjects) {
-        const TSharedPtr<FJsonObject> Object = Pair.Value;
-        if (Object->GetStringField(TEXT("Type")) == TEXT("Import")) {
-            //Thing is, class types should ALWAYS be native and defined in /Script/ packages,
-            //so we save a lot of time on asset generator side by simply skipping them altogether if they are represented by script package
-            const FString ClassPackage = Object->GetStringField(TEXT("ClassPackage"));
-            if (!ClassPackage.StartsWith(TEXT("/Script/"))) {
-                OutReferencedPackageNames.Add(ClassPackage);
-            }
-
-            //This is the most important case, absent outer describes imported UPackage package name
-            if (!Object->HasField(TEXT("Outer"))) {
-                const FString PackageName = Object->GetStringField(TEXT("ObjectName"));
-                OutReferencedPackageNames.Add(PackageName);
-            }
-        }
-    }
+void UObjectHierarchySerializer::CollectReferencedPackages(const TArray<TSharedPtr<FJsonValue>>& ReferencedSubobjects, TArray<FString>& OutReferencedPackageNames) {
+	TArray<int32> AlreadySerializedObjects;
+	CollectReferencedPackages(ReferencedSubobjects, OutReferencedPackageNames, AlreadySerializedObjects);
 }
 
-void UObjectHierarchySerializer::CollectObjectPackages(const int32 ObjectIndex, TArray<FString>& OutReferencedPackageNames) {
+void UObjectHierarchySerializer::CollectReferencedPackages(const TArray<TSharedPtr<FJsonValue>>& ReferencedSubobjects, TArray<FString>& OutReferencedPackageNames, TArray<int32>& ObjectsAlreadySerialized) {
+	for (const TSharedPtr<FJsonValue>& JsonValue : ReferencedSubobjects) {
+		CollectObjectPackages(JsonValue->AsNumber(), OutReferencedPackageNames, ObjectsAlreadySerialized);
+	}
+}
+
+void UObjectHierarchySerializer::CollectObjectPackages(const int32 ObjectIndex, TArray<FString>& OutReferencedPackageNames, TArray<int32>& ObjectsAlreadySerialized) {
     if (ObjectIndex == INDEX_NONE) {
         return;
     }
-
+	if (ObjectsAlreadySerialized.Contains(ObjectIndex)) {
+		return;
+	}
+	
+	ObjectsAlreadySerialized.Add(ObjectIndex);
     const TSharedPtr<FJsonObject> Object = SerializedObjects.FindChecked(ObjectIndex);
     const FString ObjectType = Object->GetStringField(TEXT("Type"));
     
@@ -215,7 +312,7 @@ void UObjectHierarchySerializer::CollectObjectPackages(const int32 ObjectIndex, 
 
         if (Object->HasField(TEXT("Outer"))) {
             const int32 OuterObjectIndex = Object->GetIntegerField(TEXT("Outer"));
-            CollectObjectPackages(OuterObjectIndex, OutReferencedPackageNames);
+            CollectObjectPackages(OuterObjectIndex, OutReferencedPackageNames, ObjectsAlreadySerialized);
         } else {
             const FString PackageName = Object->GetStringField(TEXT("ObjectName"));
             OutReferencedPackageNames.Add(PackageName);
@@ -227,21 +324,18 @@ void UObjectHierarchySerializer::CollectObjectPackages(const int32 ObjectIndex, 
         }
 
         const int32 ObjectClassIndex = Object->GetIntegerField(TEXT("ObjectClass"));
-        CollectObjectPackages(ObjectClassIndex, OutReferencedPackageNames);
+        CollectObjectPackages(ObjectClassIndex, OutReferencedPackageNames, ObjectsAlreadySerialized);
 
         if (Object->HasField(TEXT("Outer"))) {
             const int32 OuterObjectIndex = Object->GetIntegerField(TEXT("Outer"));
-            CollectObjectPackages(OuterObjectIndex, OutReferencedPackageNames);
+            CollectObjectPackages(OuterObjectIndex, OutReferencedPackageNames, ObjectsAlreadySerialized);
         }
 
         if (Object->HasField(TEXT("Properties"))) {
             const TSharedPtr<FJsonObject> Properties = Object->GetObjectField(TEXT("Properties"));
+        	const TArray<TSharedPtr<FJsonValue>> ReferencedSubobjects = Properties->GetArrayField(TEXT("$ReferencedObjects"));
 
-            //TODO this is a bit difficult, I'm not sure what the correct handling would be
-            //TODO probably separation of this method into 2 stages, one for class object and outer,
-            //TODO and other for class properties specifically. Because we pretty much need to load object class
-            //TODO at this point to decipher properties object data. For now, we crash here until it's resolved
-            checkf(0, TEXT("Reference Collection on Exported Object Properties is not supported yet"));
+        	CollectReferencedPackages(ReferencedSubobjects, OutReferencedPackageNames, ObjectsAlreadySerialized);
         }
     }
 }
@@ -268,12 +362,21 @@ UObject* UObjectHierarchySerializer::DeserializeExportedObject(TSharedPtr<FJsonO
         return nullptr;
     }
      
-    const EObjectFlags ObjectLoadFlags = (EObjectFlags) ObjectJson->GetIntegerField(TEXT("ObjectFlags"));
     const FString ObjectName = ObjectJson->GetStringField(TEXT("ObjectName"));
-    UObject* Template = GetArchetypeFromRequiredInfo(ObjectClass, OuterObject, *ObjectName, ObjectLoadFlags);
 
-    //Give native deserializer a chance to handle object allocation
-    UObject* ConstructedObject = StaticConstructObject_Internal(ObjectClass, OuterObject, *ObjectName, ObjectLoadFlags, EInternalObjectFlags::None, Template);
+	UObject* ConstructedObject;
+
+	//Try to resolve existing object inside of the outer first
+	if (UObject* ExistingObject = StaticFindObjectFast(ObjectClass, OuterObject, *ObjectName)) {
+		ConstructedObject = ExistingObject;
+		
+	} else {
+		//Construct new object if we cannot otherwise
+		const EObjectFlags ObjectLoadFlags = (EObjectFlags) ObjectJson->GetIntegerField(TEXT("ObjectFlags"));
+		
+		UObject* Template = GetArchetypeFromRequiredInfo(ObjectClass, OuterObject, *ObjectName, ObjectLoadFlags);
+		ConstructedObject = StaticConstructObject_Internal(ObjectClass, OuterObject, *ObjectName, ObjectLoadFlags, EInternalObjectFlags::None, Template);	
+	}
 
     //Deserialize object properties now
     if (ObjectJson->HasField(TEXT("Properties"))) {
@@ -282,6 +385,7 @@ UObject* UObjectHierarchySerializer::DeserializeExportedObject(TSharedPtr<FJsonO
             DeserializeObjectProperties(Properties.ToSharedRef(), ConstructedObject);
         }
     }
+	
     return ConstructedObject;
 }
 
@@ -375,5 +479,6 @@ void UObjectHierarchySerializer::SerializeExportedObject(TSharedPtr<FJsonObject>
         const TSharedRef<FJsonObject> Properties = SerializeObjectProperties(Object);
         ResultJson->SetObjectField(TEXT("Properties"), Properties);
     }
-}
+} 
+
 

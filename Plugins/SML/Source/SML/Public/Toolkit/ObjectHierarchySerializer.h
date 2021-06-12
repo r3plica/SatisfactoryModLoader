@@ -24,8 +24,6 @@ private:
 
     UPROPERTY()
     TMap<UObject*, FString> ObjectMarks;
-
-    bool bAllowExportObjectSerialization;
 public:
     UObjectHierarchySerializer();
 
@@ -33,6 +31,9 @@ public:
     
     TSharedRef<FJsonObject> SerializeObjectProperties(UObject* Object);
     void SerializeObjectPropertiesIntoObject(UObject* Object, TSharedPtr<FJsonObject> OutObject);
+
+	bool CompareUObjects(const int32 ObjectIndex, UObject* Object);
+	bool AreObjectPropertiesUpToDate(const TSharedRef<FJsonObject>& Properties, UObject* Object);
     
     void DeserializeObjectProperties(const TSharedRef<FJsonObject>& Properties, UObject* Object);
 
@@ -50,13 +51,6 @@ public:
      */
     void SetObjectMark(UObject* Object, const FString& ObjectMark);
 
-    /**
-     * Disables or enables exported object serialization
-     * When exported object serialization is disabled, attempting to serialize
-     * an object inside of the same package will trigger an exception
-     */
-    void SetAllowExportedObjectSerialization(bool bAllowExportedObjectSerialization);
-    
     void InitializeForDeserialization(const TArray<TSharedPtr<FJsonValue>>& ObjectsArray);
 	void SetPackageForDeserialization(UPackage* SelfPackage);
 	
@@ -66,9 +60,11 @@ public:
     
     TArray<TSharedPtr<FJsonValue>> FinalizeSerialization();
 
-    void CollectReferencedPackages(TArray<FString>& OutReferencedPackageNames);
+	void CollectReferencedPackages(const TArray<TSharedPtr<FJsonValue>>& ReferencedSubobjects, TArray<FString>& OutReferencedPackageNames);
 
-    void CollectObjectPackages(const int32 ObjectIndex, TArray<FString>& OutReferencedPackageNames);
+	void CollectReferencedPackages(const TArray<TSharedPtr<FJsonValue>>& ReferencedSubobjects, TArray<FString>& OutReferencedPackageNames, TArray<int32>& ObjectsAlreadySerialized);
+
+    void CollectObjectPackages(const int32 ObjectIndex, TArray<FString>& OutReferencedPackageNames, TArray<int32>& ObjectsAlreadySerialized);
 
     FORCEINLINE static const TSet<FName>& GetUnhandledNativeClasses() { return UnhandledNativeClasses; }
 private:

@@ -8,7 +8,8 @@ public class Alpakit : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		bLegacyPublicIncludePaths = false;
-
+		ShadowVariableWarningLevel = WarningLevel.Off;
+		
 		PublicDependencyModuleNames.AddRange(new[] {
 			"Core",
 		});

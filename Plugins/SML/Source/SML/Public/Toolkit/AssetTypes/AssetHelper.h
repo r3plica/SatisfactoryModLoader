@@ -49,4 +49,10 @@ public:
 
     /** Converts property path to string */
     static FString PropertyPathToString(const struct FCachedPropertyPath& Path);
+
+	/** Computes hash for the provided payload */
+	static FString ComputePayloadHash(const TArray64<uint8>& Payload);
+
+	/* Computes hash for the provided payload */
+	static FString ComputePayloadHash(const TArray<uint8>& Payload);
 };

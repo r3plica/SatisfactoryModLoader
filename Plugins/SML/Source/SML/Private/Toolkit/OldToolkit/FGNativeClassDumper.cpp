@@ -5,7 +5,7 @@
 
 DEFINE_LOG_CATEGORY(LogNativeClassDumper)
 
-bool CheckValueEqualDefault(UProperty* Property, const void* PropertyValue) {
+bool CheckValueEqualDefault(FProperty* Property, const void* PropertyValue) {
 	const SIZE_T PropertyValueSize = Property->GetSize();
 	void* DefaultValue = FMemory::Malloc(PropertyValueSize);
 	Property->InitializeValue(DefaultValue);
@@ -14,7 +14,7 @@ bool CheckValueEqualDefault(UProperty* Property, const void* PropertyValue) {
 	return bRes;
 }
 
-UClass* FindFirstClassWithValueOverride(UObject* ClassObject, UProperty* Property) {
+UClass* FindFirstClassWithValueOverride(UObject* ClassObject, FProperty* Property) {
 	UClass* EndClass = Cast<UClass>(Property->GetOwnerUObject());
 	UClass* TargetClass = ClassObject->GetClass();
 	void* CurrentValue = Property->ContainerPtrToValuePtr<void>(ClassObject);
@@ -34,7 +34,7 @@ UClass* FindFirstClassWithValueOverride(UObject* ClassObject, UProperty* Propert
 	return EndClass;
 }
 
-bool CanSkipPropertyValue(UProperty* Property, UObject* ClassObject) {
+bool CanSkipPropertyValue(FProperty* Property, UObject* ClassObject) {
 	UClass* ClassWithValueOverride = FindFirstClassWithValueOverride(ClassObject, Property);
 	//We can use parent value if it's not set in native class (we don't have .cpp for native classes in editor), and it's not us who set the value
 	const bool bCanUseParentValue = ClassWithValueOverride != ClassObject->GetClass() && !ClassWithValueOverride->GetPathName().StartsWith(TEXT("/Script/FactoryGame."));
@@ -43,15 +43,15 @@ bool CanSkipPropertyValue(UProperty* Property, UObject* ClassObject) {
 	return bCanUseParentValue || bIsValueEqualDefault;
 }
 
-TSharedRef<FJsonValue> CustomPropertySerialization(UProperty* Property, const void* Value, UPropertySerializer* PropertySerializer)
+TSharedRef<FJsonValue> CustomPropertySerialization(FProperty* Property, const void* Value, UPropertySerializer* PropertySerializer)
 {
-	if (const UClassProperty* ClassProperty = Cast<const UClassProperty>(Property)) {
+	if (const FClassProperty* ClassProperty = Cast<const FClassProperty>(Property)) {
 		UClass* ClassObject = Cast<UClass>(ClassProperty->GetObjectPropertyValue(Value));
 		//For class it's enough just to have it's path name for deserialization
 		return MakeShareable(new FJsonValueString(ClassObject->GetPathName()));
 	}
 	
-	if (Property->IsA<USoftObjectProperty>()) {
+	if (Property->IsA<FSoftObjectProperty>()) {
 		//For soft object reference, path is enough too for deserialization.
 		const FSoftObjectPtr* ObjectPtr = reinterpret_cast<const FSoftObjectPtr*>(Value);
 		TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject());
@@ -59,7 +59,7 @@ TSharedRef<FJsonValue> CustomPropertySerialization(UProperty* Property, const vo
 		return MakeShareable(new FJsonValueObject(Result));
 	}
 
-	if (const UObjectPropertyBase* ObjectProperty = Cast<const UObjectPropertyBase>(Property)) {
+	if (const FObjectPropertyBase* ObjectProperty = Cast<const FObjectPropertyBase>(Property)) {
 		// Only need class and name for components
 		UObject* Object = ObjectProperty->GetObjectPropertyValue(Value);
 		TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject());
@@ -95,8 +95,8 @@ TSharedPtr<FJsonObject> DumpNativeClass(UClass* NativeClass, UPropertySerializer
 
 	TArray<TSharedPtr<FJsonValue>> Fields;
 	UObject* CDO = NativeClass->GetDefaultObject();
-	for (TFieldIterator<UProperty> It(NativeClass); It; ++It) {
-		UProperty* Property = *It;
+	for (TFieldIterator<FProperty> It(NativeClass); It; ++It) {
+		FProperty* Property = *It;
 		if(CanSkipPropertyValue(Property, CDO)) continue;
 		const void* Value = Property->ContainerPtrToValuePtr<void>(CDO);
 		TSharedPtr<FJsonObject> PropertyObject = MakeShareable(new FJsonObject());

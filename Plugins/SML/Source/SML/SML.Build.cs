@@ -13,7 +13,8 @@ public class SML : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         bLegacyPublicIncludePaths = false;
-
+        ShadowVariableWarningLevel = WarningLevel.Off;
+        
         //SML transitive dependencies
         PublicDependencyModuleNames.AddRange(new[] {
             "Json",

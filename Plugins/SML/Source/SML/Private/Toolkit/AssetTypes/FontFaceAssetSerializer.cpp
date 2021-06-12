@@ -3,6 +3,8 @@
 #include "Toolkit/AssetDumping/AssetTypeSerializerMacros.h"
 #include "Toolkit/ObjectHierarchySerializer.h"
 #include "Engine/FontFace.h"
+#include "Toolkit/PropertySerializer.h"
+#include "Toolkit/AssetTypes/AssetHelper.h"
 
 void UFontFaceAssetSerializer::SerializeAsset(TSharedRef<FSerializationContext> Context) const {
     BEGIN_ASSET_SERIALIZATION(UFontFace)
@@ -18,6 +20,9 @@ void UFontFaceAssetSerializer::SerializeAsset(TSharedRef<FSerializationContext> 
     }
     //Make sure we loaded data and dump it into destination file
     check(FontRawData.Num());
+
+	//Record file hash so we do not have to load it again to check for asset changes in editor
+	Data->SetStringField(TEXT("FontPayloadHash"), FAssetHelper::ComputePayloadHash(FontRawData));
 
     //Theoretically .ufont can be any kind of font format that FreeType supports,
     //but since most of the programs (including UE importer and Windows font viewer) are able to

@@ -50,7 +50,7 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 		}
 	case EX_SetConst:
 		{
-			UProperty* InnerProp = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* InnerProp = ReadPointer<FProperty>(ScriptIndex);
 			FEdGraphPinType PropertyPinType;
 			FPropertyTypeHelper::ConvertPropertyToPinType(InnerProp, PropertyPinType);
 
@@ -93,12 +93,12 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 		{
 			Result->SetStringField(TEXT("Inst"), TEXT("MapConst"));
 
-			UProperty* KeyProp = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* KeyProp = ReadPointer<FProperty>(ScriptIndex);
 			FEdGraphPinType KeyPropPinType;
 			FPropertyTypeHelper::ConvertPropertyToPinType(KeyProp, KeyPropPinType);
 			Result->SetObjectField(TEXT("KeyProperty"), FPropertyTypeHelper::SerializeGraphPinType(KeyPropPinType, SelfScope.Get()));
 				
-			UProperty* ValProp = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* ValProp = ReadPointer<FProperty>(ScriptIndex);
 			FEdGraphPinType ValuePropPinType;
 			FPropertyTypeHelper::ConvertPropertyToPinType(ValProp, ValuePropPinType);
 			Result->SetObjectField(TEXT("ValueProperty"), FPropertyTypeHelper::SerializeGraphPinType(ValuePropPinType, SelfScope.Get()));
@@ -185,7 +185,7 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 		{
 			Result->SetStringField(TEXT("Inst"), TEXT("LetValueOnPersistentFrame"));
 
-			UProperty* Property = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* Property = ReadPointer<FProperty>(ScriptIndex);
 			Result->SetStringField(TEXT("PropertyName"), Property->GetName());
 
 			FEdGraphPinType PropertyType;
@@ -199,7 +199,7 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 		{
 			Result->SetStringField(TEXT("Inst"), TEXT("StructMemberContext"));
 
-			UProperty* Property = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* Property = ReadPointer<FProperty>(ScriptIndex);
 			FEdGraphPinType PropertyPinType;
 			FPropertyTypeHelper::ConvertPropertyToPinType(Property, PropertyPinType);
 			Result->SetObjectField(TEXT("PropertyType"), FPropertyTypeHelper::SerializeGraphPinType(PropertyPinType, SelfScope.Get()));
@@ -273,7 +273,7 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 		{
 			Result->SetStringField(TEXT("Inst"), TEXT("LocalVariable"));
 			
-			UProperty* Property = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* Property = ReadPointer<FProperty>(ScriptIndex);
 			FEdGraphPinType PropertyPinType;
 			FPropertyTypeHelper::ConvertPropertyToPinType(Property, PropertyPinType);
 				
@@ -285,7 +285,7 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 		{
 			Result->SetStringField(TEXT("Inst"), TEXT("DefaultVariable"));
 			
-			UProperty* Property = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* Property = ReadPointer<FProperty>(ScriptIndex);
 			FEdGraphPinType PropertyPinType;
 			FPropertyTypeHelper::ConvertPropertyToPinType(Property, PropertyPinType);
 			
@@ -297,7 +297,7 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 		{
 			Result->SetStringField(TEXT("Inst"), TEXT("InstanceVariable"));
 			
-			UProperty* Property = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* Property = ReadPointer<FProperty>(ScriptIndex);
 			FEdGraphPinType PropertyPinType;
 			FPropertyTypeHelper::ConvertPropertyToPinType(Property, PropertyPinType);
 				
@@ -309,7 +309,7 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 		{
 			Result->SetStringField(TEXT("Inst"), TEXT("LocalOutVariable"));
 			
-			UProperty* Property = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* Property = ReadPointer<FProperty>(ScriptIndex);
 			FEdGraphPinType PropertyPinType;
 			FPropertyTypeHelper::ConvertPropertyToPinType(Property, PropertyPinType);
 				
@@ -477,7 +477,7 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 			Result->SetNumberField(TEXT("SkipOffsetForNull"), SkipCount);
 				
 			// Property corresponding to the r-value data, in case the l-value needs to be mem-zero'd
-			UProperty* Field = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* Field = ReadPointer<FProperty>(ScriptIndex);
 			if (Field) {
 				FEdGraphPinType FieldPinType;
 				FPropertyTypeHelper::ConvertPropertyToPinType(Field, FieldPinType);
@@ -675,7 +675,7 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 			//Enumerate over structure properties and sort them by property names
 			TSharedPtr<FJsonObject> Properties = MakeShareable(new FJsonObject());
 
-			for(UProperty* StructProp = Struct->PropertyLink; StructProp; StructProp = StructProp->PropertyLinkNext) {
+			for(FProperty* StructProp = Struct->PropertyLink; StructProp; StructProp = StructProp->PropertyLinkNext) {
 				// Skip transient and editor only properties, this needs to be synched with KismetCompilerVMBackend and ScriptCore
 				if (StructProp->PropertyFlags & CPF_Transient || (!bIsEditorOnlyStruct && StructProp->PropertyFlags & CPF_EditorOnly)) {
 					continue;
@@ -709,7 +709,7 @@ TSharedPtr<FJsonObject> FKismetBytecodeDisassemblerJson::SerializeExpression(int
 		}
 	case EX_ArrayConst:
 		{
-			UProperty* InnerProp = ReadPointer<UProperty>(ScriptIndex);
+			FProperty* InnerProp = ReadPointer<FProperty>(ScriptIndex);
 			FEdGraphPinType PropertyPinType;
 			FPropertyTypeHelper::ConvertPropertyToPinType(InnerProp, PropertyPinType);
 

@@ -19,29 +19,23 @@ private:
 
     UPROPERTY()
     TArray<UStruct*> PinnedStructs;
-    
-    TMap<FProperty*, FPropertySerializer> CustomPropertySerializers;
-    TMap<FProperty*, FPropertyDeserializer> CustomPropertyDeserializers;
     TArray<FProperty*> BlacklistedProperties;
 public:
     /** Disables property serialization entirely */
     void DisablePropertySerialization(UStruct* Struct, FName PropertyName);
 
-    /** Sets up custom property serializer for provided property */
-    void SetCustomSerializer(UStruct* Struct, FName PropertyName, FPropertySerializer Serializer);
-
-    /** Sets up custom property deserializer for provided property */
-    void SetCustomDeserializer(UStruct* Struct, FName PropertyName, FPropertyDeserializer Deserializer);
-
     /** Checks whenever we should serialize property in question at all */
     bool ShouldSerializeProperty(FProperty* Property) const;
 
-    TSharedRef<FJsonValue> SerializePropertyValue(FProperty* Property, const void* Value);
-    TSharedRef<FJsonObject> SerializeStruct(UScriptStruct* Struct, const void* Value);
+    TSharedRef<FJsonValue> SerializePropertyValue(FProperty* Property, const void* Value, TArray<int32>* OutReferencedSubobjects = NULL);
+    TSharedRef<FJsonObject> SerializeStruct(UScriptStruct* Struct, const void* Value, TArray<int32>* OutReferencedSubobjects = NULL);
     
     void DeserializePropertyValue(FProperty* Property, const TSharedRef<FJsonValue>& Value, void* OutValue);
     void DeserializeStruct(UScriptStruct* Struct, const TSharedRef<FJsonObject>& Value, void* OutValue);
+
+	bool ComparePropertyValues(FProperty* Property, const TSharedRef<FJsonValue>& JsonValue, const void* CurrentValue);
+	bool CompareStructs(UScriptStruct* Struct, const TSharedRef<FJsonObject>& JsonValue, const void* CurrentValue);
 private:
     void DeserializePropertyValueInner(FProperty* Property, const TSharedRef<FJsonValue>& Value, void* OutValue);
-    TSharedRef<FJsonValue> SerializePropertyValueInner(FProperty* Property, const void* Value);
+    TSharedRef<FJsonValue> SerializePropertyValueInner(FProperty* Property, const void* Value, TArray<int32>* OutReferencedSubobjects);
 };

@@ -9,6 +9,7 @@ public class SMLEditor : ModuleRules
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new string[] {"SML", "FactoryGame", "UnrealEd", "BlueprintGraph"});
         bLegacyPublicIncludePaths = false;
+        ShadowVariableWarningLevel = WarningLevel.Off;
         
         //SML transitive dependencies
         PublicDependencyModuleNames.AddRange(new[] {

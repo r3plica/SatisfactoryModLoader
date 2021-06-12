@@ -8,6 +8,7 @@
 
 void UCurveBaseAssetSerializer::SerializeAsset(TSharedRef<FSerializationContext> Context) const {
     BEGIN_ASSET_SERIALIZATION(UCurveBase)
+	Data->SetStringField(TEXT("AssetClass"), Asset->GetClass()->GetPathName());
     SERIALIZE_ASSET_OBJECT
     END_ASSET_SERIALIZATION
 }

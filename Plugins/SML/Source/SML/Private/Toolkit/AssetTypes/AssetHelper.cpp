@@ -335,4 +335,18 @@ FString FAssetHelper::PropertyPathToString(const FCachedPropertyPath& Path) {
     return OutString;
 }
 
+FString FAssetHelper::ComputePayloadHash(const TArray64<uint8>& Payload) {
+	FString Hash = FMD5::HashBytes(Payload.GetData(), Payload.Num() * sizeof(uint8));
+	Hash.Append(FString::Printf(TEXT("%llx"), Payload.Num()));
+	return Hash;
+}
+
+FString FAssetHelper::ComputePayloadHash(const TArray<uint8>& Payload) {
+	FString Hash = FMD5::HashBytes(Payload.GetData(), Payload.Num() * sizeof(uint8));
+	Hash.Append(FString::Printf(TEXT("%x"), Payload.Num()));
+	return Hash;
+}
+
+
+
 

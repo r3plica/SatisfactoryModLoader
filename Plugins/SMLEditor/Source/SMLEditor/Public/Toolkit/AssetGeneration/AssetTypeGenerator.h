@@ -34,6 +34,7 @@ private:
 	bool bUsingExistingPackage;
 	bool bAssetChanged;
 	bool bHasAssetEverBeenChanged;
+	bool bIsGeneratingPublicProject;
 	
 	UPROPERTY()
     UObjectHierarchySerializer* ObjectSerializer;
@@ -58,10 +59,13 @@ protected:
 	/** Returns instance of the object hierarchy serializer associated with this package */
 	FORCEINLINE UObjectHierarchySerializer* GetObjectSerializer() const { return ObjectSerializer; }
 
+	/** True whenever we are generating project that is publicly distributable. Some assets will be blanked out in that case */
+	FORCEINLINE bool IsGeneratingPublicProject() const { return bIsGeneratingPublicProject; }
+
 	/** Marks asset as changed by this generator */
 	FORCEINLINE void MarkAssetChanged() { this->bAssetChanged = true; }
 
-	FString GetAdditionalDumpFilePath(const FString& Postfix, const FString& Extension);
+	FString GetAdditionalDumpFilePath(const FString& Postfix, const FString& Extension) const;
 
 	/** Allocates new package object and asset object inside of it */
 	virtual UPackage* CreateAssetPackage() PURE_VIRTUAL(ConstructAsset, return NULL;);
@@ -72,6 +76,9 @@ protected:
 	virtual void OnExistingPackageLoaded() {};
 public:
 	UAssetTypeGenerator();
+
+	/** Sets generating public project mode on this generator */
+	FORCEINLINE void SetGeneratingPublicProject() { this->bIsGeneratingPublicProject = true; }
 
 	/** Returns name of the asset object as it is loaded from the dump */
 	FORCEINLINE FName GetAssetName() const { return AssetName; }

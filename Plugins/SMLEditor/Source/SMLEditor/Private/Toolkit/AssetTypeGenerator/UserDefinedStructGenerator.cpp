@@ -165,11 +165,13 @@ void UUserDefinedStructGenerator::PopulateStageDependencies(TArray<FAssetDepende
 		}
 
 	} else if (GetCurrentStage() == EAssetGenerationStage::CDO_FINALIZATION) {
-		TArray<FString> AllDependencyNames;
-		GetObjectSerializer()->CollectReferencedPackages(AllDependencyNames);
+		const TArray<TSharedPtr<FJsonValue>> ReferencedObjects = GetAssetData()->GetArrayField(TEXT("ReferencedObjects"));
+		
+		TArray<FString> OutReferencedPackages;
+		GetObjectSerializer()->CollectReferencedPackages(ReferencedObjects, OutReferencedPackages);
 
-		for (const FString& DependencyName : AllDependencyNames) {
-			OutDependencies.Add(FAssetDependency{FName(*DependencyName), EAssetGenerationStage::CONSTRUCTION});
+		for (const FString& DependencyPackageName : OutReferencedPackages) {
+			OutDependencies.Add(FAssetDependency{*DependencyPackageName, EAssetGenerationStage::CDO_FINALIZATION});
 		}
 	}
 }

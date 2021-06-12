@@ -10,6 +10,7 @@
 
 void UBlendSpaceSerializer::SerializeAsset(TSharedRef<FSerializationContext> Context) const {
     BEGIN_ASSET_SERIALIZATION(UBlendSpaceBase)
+	Data->SetStringField(TEXT("AssetClass"), Asset->GetClass()->GetPathName());
     SERIALIZE_ASSET_OBJECT
     END_ASSET_SERIALIZATION
 }
